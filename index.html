@@ -356,11 +356,7 @@ body::before{
       <p class="hint">MP3 &middot; WAV &middot; FLAC &middot; OGG</p>
       <input type="file" id="fileInput" accept="audio/*">
     </div>
-    <div class="divider">or</div>
-    <div class="url-row">
-      <input type="text" id="urlInput" class="url-input" placeholder="Paste a YouTube URL...">
-      <button id="urlBtn" class="url-btn">Fetch</button>
-    </div>
+    <p class="hint">AI transcription runs in your browser (no server needed)</p>
     <div class="official-row-inner" id="officialRow" style="display:none;">
       <input type="text" class="url-input" id="artistInput" placeholder="Artist" style="flex:1">
       <input type="text" class="url-input" id="titleInput" placeholder="Song title" style="flex:1">
@@ -385,6 +381,6 @@ body::before{
   </div>
 </div>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

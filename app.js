@@ -1,4 +1,65 @@
-﻿/* ================= refs ================= */
+﻿/* ================= whisper (browser-side via @huggingface/transformers) ================= */
+let _whisperPipeline = null;
+
+async function ensureWhisper() {
+  if (_whisperPipeline) return _whisperPipeline;
+  setStatus('Loading AI model (~75 MB, first time only)...', true);
+  const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
+  env.allowLocalModels = false;
+  env.useBrowserCache = true;
+  _whisperPipeline = await pipeline('automatic-speech-recognition', 'openai/whisper-tiny', {
+    progress_callback: p => {
+      if (p.status === 'downloading' && p.progress != null)
+        setStatus('Downloading model... ' + Math.round(p.progress) + '%', true);
+    },
+  });
+  return _whisperPipeline;
+}
+
+async function decodeAudioForWhisper(file) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await file.arrayBuffer();
+  const decoded = await ctx.decodeAudioData(buf);
+  const raw = decoded.getChannelData(0);
+  const rate = decoded.sampleRate;
+  const ratio = rate / 16000;
+  const len = Math.round(raw.length / ratio);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) out[i] = raw[Math.min(Math.round(i * ratio), raw.length - 1)];
+  ctx.close();
+  return out;
+}
+
+async function transcribeInBrowser(file, language) {
+  const whisper = await ensureWhisper();
+  setStatus('Transcribing...', true);
+  const audioData = await decodeAudioForWhisper(file);
+  const result = await whisper(audioData, {
+    return_timestamps: true,
+    language: language === 'auto' ? undefined : language,
+  });
+  const w = [];
+  if (result.chunks) {
+    result.chunks.forEach(ch => {
+      const text = ch.text.trim();
+      if (!text) return;
+      const toks = text.split(/\s+/).filter(Boolean);
+      const s = ch.timestamp[0];
+      const e = ch.timestamp[1] || s + 1;
+      const d = e - s;
+      toks.forEach((tok, i) => {
+        w.push({ word: tok, start: +(s + d * i / toks.length).toFixed(3), end: +(s + d * (i + 1) / toks.length).toFixed(3) });
+      });
+    });
+  } else {
+    (result.text || '').split(/\s+/).filter(Boolean).forEach((tok, i) => {
+      w.push({ word: tok, start: +(i * 0.5).toFixed(3), end: +((i + 1) * 0.5).toFixed(3) });
+    });
+  }
+  return { words: w, language: result.language || 'en' };
+}
+
+/* ================= refs ================= */
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const audio = document.getElementById('audio');
@@ -7,8 +68,6 @@ const speedBtn = document.getElementById('speedBtn');
 const langSelect = document.getElementById('langSelect');
 const volSlider = document.getElementById('volSlider');
 const volIcon = document.getElementById('volIcon');
-const urlInput = document.getElementById('urlInput');
-const urlBtn = document.getElementById('urlBtn');
 const lyricsTrack = document.getElementById('lyricsTrack');
 const lyricsViewport = document.getElementById('lyricsViewport');
 const controlsGroup = document.getElementById('controlsGroup');
@@ -109,62 +168,33 @@ controlsGroup.addEventListener('mouseenter', () => {
 });
 showControls();
 
-/* ================= upload ================= */
+/* ================= upload (client-side) ================= */
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-urlBtn.addEventListener('click', () => handleUrl());
-urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleUrl(); });
 
 function hideUpload() { uploadOverlay.classList.add('hidden'); showControls(); }
 
-async function handleUrl() {
-  const url = urlInput.value.trim();
-  if (!url) return;
-  urlBtn.disabled = true; urlBtn.textContent = 'Fetching...';
-  setStatus('Downloading from YouTube...', true);
+async function handleFile(file) {
+  const meta = guessMeta(file.name);
+  artistInput.value = meta.artist;
+  titleInput.value = meta.title;
+  audio.src = URL.createObjectURL(file);
+  hideUpload();
   try {
-    const res = await fetch('/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-    const data = await res.json();
-    if (data.error) { setStatus('Error: ' + data.error); return; }
-    const meta = guessMeta(data.filename);
-    artistInput.value = meta.artist; titleInput.value = meta.title;
-    audio.src = '/uploads/' + data.id;
-    hideUpload();
-    setStatus('Transcribing...', true);
-    const tRes = await fetch('/transcribe/' + data.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: langSelect.value }) });
-    const tData = await tRes.json();
-    if (tData.error) { setStatus('Transcription failed'); return; }
-    words = tData.words; whisperWords = tData.words;
+    const result = await transcribeInBrowser(file, langSelect.value);
+    words = result.words;
+    whisperWords = [...words];
     setStatus('');
     buildTimedLines();
-    renderLyrics(tData.language);
+    renderLyrics(result.language);
     tryAutoOfficial();
-  } catch (e) { setStatus('Network error'); }
-  finally { urlBtn.disabled = false; urlBtn.textContent = 'Fetch'; }
-}
-
-async function handleFile(file) {
-  setStatus('Uploading...');
-  const form = new FormData(); form.append('audio', file);
-  const res = await fetch('/upload', { method: 'POST', body: form });
-  const data = await res.json();
-  if (data.error) { setStatus('Upload failed'); return; }
-  const meta = guessMeta(data.filename);
-  artistInput.value = meta.artist; titleInput.value = meta.title;
-  audio.src = '/uploads/' + data.id;
-  hideUpload();
-  setStatus('Transcribing...', true);
-  const tRes = await fetch('/transcribe/' + data.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: langSelect.value }) });
-  const tData = await tRes.json();
-  if (tData.error) { setStatus('Transcription failed'); return; }
-  words = tData.words; whisperWords = tData.words;
-  setStatus('');
-  buildTimedLines();
-  renderLyrics(tData.language);
-  tryAutoOfficial();
+  } catch (e) {
+    console.error(e);
+    setStatus('Transcription failed — ' + e.message);
+  }
 }
 
 function setStatus(msg, loading) {
@@ -270,7 +300,6 @@ fsScrubTrack.addEventListener('click', e => {
 function updateActiveLine(t) {
   if (!timedLines.length) return;
 
-  /* find the line containing the current time — stay on a line until it ends */
   let idx = timedLines.length - 1;
   for (let i = 0; i < timedLines.length; i++) {
     if (t < timedLines[i].startTime) { idx = Math.max(0, i - 1); break; }
@@ -289,7 +318,6 @@ function updateActiveLine(t) {
       else if (Math.abs(i - idx) <= 2) l.el.classList.add('near');
       else if (i < idx) l.el.classList.add('past');
     });
-    /* scroll only when we've moved past the previous line's last word */
     const prevLine = prevIdx >= 0 ? timedLines[prevIdx] : null;
     const canScroll = !prevLine || t >= prevLine.endTime;
     if (canScroll && !isFullscreen && timedLines[idx] && timedLines[idx].el) {
@@ -300,9 +328,6 @@ function updateActiveLine(t) {
     }
   }
 
-  /* word highlighting — each word is checked against its own timestamps:
-     sung once fully passed, lit while it is being sung (with a small
-     render-latency lookahead). No global offset hack. */
   const line = timedLines[idx];
   if (!line) return;
   const wt = t + WORD_LEAD_S;
@@ -481,7 +506,9 @@ async function fetchOfficial(silent) {
   officialBtn.disabled = true;
   officialBtn.textContent = 'Searching...';
   try {
-    const res = await fetch('/lyrics?' + new URLSearchParams({ title, artist }));
+    const params = new URLSearchParams({ title });
+    if (artist) params.set('artist', artist);
+    const res = await fetch('proxy.php?' + params.toString());
     const data = await res.json();
     if (!res.ok || data.error) { if (!silent) setStatus(data.error || 'Not found'); return false; }
     if (data.syncedLyrics) {
