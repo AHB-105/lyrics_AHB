@@ -45,16 +45,16 @@ def youtube_download():
     if not url:
         return jsonify({"error": "No URL"}), 400
 
-    name = uuid.uuid4().hex + ".mp3"
-    out_path = os.path.join(UPLOAD_DIR, name)
+    uid = uuid.uuid4().hex
+    out_pattern = os.path.join(UPLOAD_DIR, uid + ".%(ext)s")
 
     try:
         result = subprocess.run(
             [
                 "yt-dlp",
-                "-x", "--audio-format", "mp3",
+                "-f", "bestaudio/best",
                 "--no-playlist",
-                "-o", out_path,
+                "-o", out_pattern,
                 url,
             ],
             capture_output=True, text=True, timeout=120,
@@ -66,12 +66,13 @@ def youtube_download():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    if not os.path.exists(out_path):
-        for f in os.listdir(UPLOAD_DIR):
-            if f.startswith(name.replace(".mp3", "")):
-                out_path = os.path.join(UPLOAD_DIR, f)
-                name = f
-                break
+    name = None
+    for f in os.listdir(UPLOAD_DIR):
+        if f.startswith(uid):
+            name = f
+            break
+    if not name:
+        return jsonify({"error": "File not found after download"}), 500
 
     title = "YouTube Audio"
     try:
