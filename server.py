@@ -123,5 +123,6 @@ def lyrics():
 
 
 if __name__ == "__main__":
-    print("Starting server on http://localhost:5000")
-    app.run(port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Starting server on http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
