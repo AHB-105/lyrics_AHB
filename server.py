@@ -5,21 +5,10 @@ import subprocess
 import urllib.request
 import urllib.parse
 from flask import Flask, request, jsonify, send_from_directory
-from faster_whisper import WhisperModel
 
 app = Flask(__name__)
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-model = None
-MODEL_SIZE = "tiny"
-
-
-@app.before_request
-def load_model():
-    global model
-    if model is None:
-        model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
 
 
 @app.route("/")
@@ -77,7 +66,6 @@ def youtube_download():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    # yt-dlp may add the extension, find the actual file
     if not os.path.exists(out_path):
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith(name.replace(".mp3", "")):
@@ -85,7 +73,6 @@ def youtube_download():
                 name = f
                 break
 
-    # Get title from yt-dlp
     title = "YouTube Audio"
     try:
         info = subprocess.run(
@@ -122,7 +109,6 @@ def lyrics():
     if not results:
         return jsonify({"error": "No lyrics found", "results": []}), 404
 
-    # prefer a result with synced lyrics, else plain
     best = next((r for r in results if r.get("syncedLyrics")), None) or next((r for r in results if r.get("plainLyrics")), None)
     if not best:
         return jsonify({"error": "No lyrics content"}), 404
@@ -135,36 +121,6 @@ def lyrics():
     })
 
 
-@app.route("/transcribe/<file_id>", methods=["POST"])
-def transcribe(file_id):
-    path = os.path.join(UPLOAD_DIR, file_id)
-    if not os.path.exists(path):
-        return jsonify({"error": "File not found"}), 404
-
-    data = request.get_json(silent=True) or {}
-    language = data.get("language", "en")
-
-    segments, info = model.transcribe(
-        path,
-        word_timestamps=True,
-        language=language if language != "auto" else None,
-        condition_on_previous_text=True,
-    )
-
-    words = []
-    for seg in segments:
-        for w in seg.words:
-            words.append({
-                "word": w.word.strip(),
-                "start": round(w.start, 3),
-                "end": round(w.end, 3),
-            })
-
-    return jsonify({"words": words, "language": info.language})
-
-
 if __name__ == "__main__":
-    print(f"Loading Whisper model ({MODEL_SIZE})...")
-    model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-    print("Model loaded. Starting server on http://localhost:5000")
+    print("Starting server on http://localhost:5000")
     app.run(port=5000, debug=False)
