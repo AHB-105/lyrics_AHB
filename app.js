@@ -7,7 +7,7 @@ async function ensureWhisper() {
   const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
   env.allowLocalModels = false;
   env.useBrowserCache = true;
-  _whisperPipeline = await pipeline('automatic-speech-recognition', 'openai/whisper-tiny', {
+  _whisperPipeline = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny', {
     progress_callback: p => {
       if (p.status === 'downloading' && p.progress != null)
         setStatus('Downloading model... ' + Math.round(p.progress) + '%', true);
