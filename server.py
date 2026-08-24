@@ -12,7 +12,7 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 model = None
-MODEL_SIZE = "small"
+MODEL_SIZE = "tiny"
 
 
 @app.before_request
@@ -63,7 +63,6 @@ def youtube_download():
         result = subprocess.run(
             [
                 "yt-dlp",
-                "--js-runtimes", "node",
                 "-x", "--audio-format", "mp3",
                 "--no-playlist",
                 "-o", out_path,
@@ -90,7 +89,7 @@ def youtube_download():
     title = "YouTube Audio"
     try:
         info = subprocess.run(
-            ["yt-dlp", "--js-runtimes", "nodejs", "--get-title", "--no-playlist", url],
+            ["yt-dlp", "--get-title", "--no-playlist", url],
             capture_output=True, text=True, timeout=15,
         )
         if info.returncode == 0 and info.stdout.strip():
