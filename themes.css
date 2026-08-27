@@ -1,0 +1,42 @@
+/* ============================================================
+   Theme layer — one token set per theme, selected at serve-time
+   via <html data-theme="...">. Base tokens live in index.html
+   (:root) and describe the default limelight theme, so adding a
+   new theme is only a new token block here + a route.
+   ============================================================ */
+
+:root[data-theme="crimson"]{
+  --bg:#0d0507; --select-bg:#1c0b0f;
+  --border-hover:rgba(239,91,96,.65);
+  --pill-bg:rgba(13,5,7,.74); --pill-border:rgba(255,255,255,.12);
+  --status-bg:rgba(13,5,7,.8);
+  --selection-bg:rgba(229,72,77,.32);
+  --accent:#e5484d; --accent-strong:#ef5b60; --accent-deep:#ff9aa0;
+  --accent-glow:rgba(229,72,77,.5); --accent-ring:rgba(229,72,77,.22);
+  --accent-soft:rgba(229,72,77,.14); --accent-hover:rgba(229,72,77,.28);
+  --accent-border:rgba(239,91,96,.45);
+  --glow-a:rgba(251,146,60,.12); --glow-b:rgba(229,72,77,.2); --glow-c:rgba(157,23,77,.16);
+  --spot-top:rgba(239,91,96,.3); --spot-mid:rgba(229,72,77,.13);
+  --mouse-top:rgba(239,91,96,.06); --mouse-mid:rgba(229,72,77,.022);
+  --upload-glow:rgba(229,72,77,.1);
+  --lit-shadow-mid:rgba(229,72,77,.42); --lit-shadow-far:rgba(255,154,160,.2);
+  --intro-shadow:rgba(229,72,77,.34);
+}
+
+:root[data-theme="emerald"]{
+  --bg:#05100a; --select-bg:#0a1f15;
+  --border-hover:rgba(52,211,153,.65);
+  --pill-bg:rgba(5,16,10,.74); --pill-border:rgba(255,255,255,.12);
+  --status-bg:rgba(5,16,10,.8);
+  --selection-bg:rgba(52,211,153,.3);
+  --accent:#2fbf8f; --accent-strong:#4adeab; --accent-deep:#9ff0cd;
+  --accent-glow:rgba(47,191,143,.5); --accent-ring:rgba(47,191,143,.22);
+  --accent-soft:rgba(47,191,143,.13); --accent-hover:rgba(47,191,143,.26);
+  --accent-border:rgba(74,222,171,.4);
+  --glow-a:rgba(94,234,212,.11); --glow-b:rgba(47,191,143,.2); --glow-c:rgba(16,128,108,.16);
+  --spot-top:rgba(74,222,171,.28); --spot-mid:rgba(47,191,143,.12);
+  --mouse-top:rgba(47,191,143,.06); --mouse-mid:rgba(47,191,143,.022);
+  --upload-glow:rgba(47,191,143,.1);
+  --lit-shadow-mid:rgba(16,185,129,.42); --lit-shadow-far:rgba(159,240,205,.2);
+  --intro-shadow:rgba(47,191,143,.34);
+}

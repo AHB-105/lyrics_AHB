@@ -11,6 +11,26 @@ app = Flask(__name__)
 
 _whisper_model = None
 
+THEMES = {"1": "crimson", "2": "emerald"}
+_INDEX_TEMPLATE = None
+
+
+def get_index_template():
+    global _INDEX_TEMPLATE
+    if _INDEX_TEMPLATE is None:
+        base = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(base, "index.html"), "r", encoding="utf-8") as fh:
+            _INDEX_TEMPLATE = fh.read()
+    return _INDEX_TEMPLATE
+
+
+def themed_index(theme):
+    html = get_index_template()
+    html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-theme=\"{0}\">".format(theme), 1)
+    html = html.replace("</head>", "<link rel=\"stylesheet\" href=\"/themes.css\">\n</head>", 1)
+    return html
+
+
 def get_whisper():
     global _whisper_model
     if _whisper_model is None:
@@ -25,6 +45,21 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
+
+
+@app.route("/1")
+def index_crimson():
+    return themed_index(THEMES["1"])
+
+
+@app.route("/2")
+def index_emerald():
+    return themed_index(THEMES["2"])
+
+
+@app.route("/themes.css")
+def serve_themes():
+    return send_from_directory(".", "themes.css")
 
 
 @app.route("/app.js")

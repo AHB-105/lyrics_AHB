@@ -2,3 +2,5 @@ uploads/
 __pycache__/
 *.pyc
 .DS_Store
+server.out.log
+server.err.log
