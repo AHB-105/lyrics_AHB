@@ -4,9 +4,20 @@ import uuid
 import subprocess
 import urllib.request
 import urllib.parse
+import whisper
 from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__)
+
+_whisper_model = None
+
+def get_whisper():
+    global _whisper_model
+    if _whisper_model is None:
+        print("Loading Whisper model (base)...", flush=True)
+        _whisper_model = whisper.load_model("base")
+        print("Whisper model loaded.", flush=True)
+    return _whisper_model
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -19,6 +30,11 @@ def index():
 @app.route("/app.js")
 def app_js():
     return send_from_directory(".", "app.js")
+
+
+@app.route("/fonts/<path:filename>")
+def serve_font(filename):
+    return send_from_directory(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts"), filename)
 
 
 @app.route("/uploads/<path:filename>")
@@ -86,6 +102,40 @@ def youtube_download():
         pass
 
     return jsonify({"id": name, "filename": title})
+
+
+@app.route("/transcribe", methods=["POST"])
+def transcribe():
+    data = request.get_json()
+    filepath = data.get("filepath", "").strip()
+    language = data.get("language", "auto")
+
+    full_path = os.path.join(UPLOAD_DIR, filepath)
+    if not os.path.exists(full_path):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        model = get_whisper()
+        opts = {}
+        if language and language != "auto":
+            opts["language"] = language
+        result = model.transcribe(full_path, word_timestamps=True, **opts)
+
+        words = []
+        for seg in result.get("segments", []):
+            for w in seg.get("words", []):
+                words.append({
+                    "word": w["word"].strip(),
+                    "start": round(w["start"], 3),
+                    "end": round(w["end"], 3),
+                })
+
+        return jsonify({
+            "words": words,
+            "language": result.get("language", "en"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/lyrics", methods=["GET"])

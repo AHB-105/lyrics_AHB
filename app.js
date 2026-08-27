@@ -1,62 +1,13 @@
-/* ================= whisper (browser-side via @huggingface/transformers) ================= */
-let _whisperPipeline = null;
-
-async function ensureWhisper() {
-  if (_whisperPipeline) return _whisperPipeline;
-  setStatus('Loading AI model (~75 MB, first time only)...', true);
-  const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
-  env.allowLocalModels = false;
-  env.useBrowserCache = true;
-  _whisperPipeline = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny', {
-    progress_callback: p => {
-      if (p.status === 'downloading' && p.progress != null)
-        setStatus('Downloading model... ' + Math.round(p.progress) + '%', true);
-    },
+/* ================= transcription (server-side via openai-whisper) ================= */
+async function transcribeOnServer(filepath, language) {
+  const res = await fetch('/transcribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filepath, language }),
   });
-  return _whisperPipeline;
-}
-
-async function decodeAudioForWhisper(file) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const buf = await file.arrayBuffer();
-  const decoded = await ctx.decodeAudioData(buf);
-  const raw = decoded.getChannelData(0);
-  const rate = decoded.sampleRate;
-  const ratio = rate / 16000;
-  const len = Math.round(raw.length / ratio);
-  const out = new Float32Array(len);
-  for (let i = 0; i < len; i++) out[i] = raw[Math.min(Math.round(i * ratio), raw.length - 1)];
-  ctx.close();
-  return out;
-}
-
-async function transcribeInBrowser(file, language) {
-  const whisper = await ensureWhisper();
-  setStatus('Transcribing...', true);
-  const audioData = await decodeAudioForWhisper(file);
-  const result = await whisper(audioData, {
-    return_timestamps: true,
-    language: language === 'auto' ? undefined : language,
-  });
-  const w = [];
-  if (result.chunks) {
-    result.chunks.forEach(ch => {
-      const text = ch.text.trim();
-      if (!text) return;
-      const toks = text.split(/\s+/).filter(Boolean);
-      const s = ch.timestamp[0];
-      const e = ch.timestamp[1] || s + 1;
-      const d = e - s;
-      toks.forEach((tok, i) => {
-        w.push({ word: tok, start: +(s + d * i / toks.length).toFixed(3), end: +(s + d * (i + 1) / toks.length).toFixed(3) });
-      });
-    });
-  } else {
-    (result.text || '').split(/\s+/).filter(Boolean).forEach((tok, i) => {
-      w.push({ word: tok, start: +(i * 0.5).toFixed(3), end: +((i + 1) * 0.5).toFixed(3) });
-    });
-  }
-  return { words: w, language: result.language || 'en' };
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'Transcription failed');
+  return data;
 }
 
 /* ================= refs ================= */
@@ -194,27 +145,31 @@ async function handleUrl() {
     artistInput.value = meta.artist; titleInput.value = meta.title;
     audio.src = '/uploads/' + data.id;
     hideUpload();
-    setStatus('Fetching audio file for transcription...', true);
-    const audioRes = await fetch('/uploads/' + data.id);
-    const blob = await audioRes.blob();
-    const file = new File([blob], data.filename + '.mp3', { type: 'audio/mpeg' });
-    const result = await transcribeInBrowser(file, langSelect.value);
+    setStatus('Transcribing on server...', true);
+    const result = await transcribeOnServer(data.id, langSelect.value);
     words = result.words; whisperWords = [...words];
     setStatus('');
     buildTimedLines();
     renderLyrics(result.language);
     tryAutoOfficial();
-  } catch (e) { setStatus('Network error'); console.error(e); }
+  } catch (e) { setStatus('Error: ' + e.message); console.error(e); }
   finally { urlBtn.disabled = false; urlBtn.textContent = 'Fetch'; }
 }
 
 async function handleFile(file) {
   const meta = guessMeta(file.name);
   artistInput.value = meta.artist; titleInput.value = meta.title;
-  audio.src = URL.createObjectURL(file);
-  hideUpload();
+  setStatus('Uploading...', true);
+  const fd = new FormData();
+  fd.append('audio', file);
   try {
-    const result = await transcribeInBrowser(file, langSelect.value);
+    const upRes = await fetch('/upload', { method: 'POST', body: fd });
+    const upData = await upRes.json();
+    if (upData.error) throw new Error(upData.error);
+    audio.src = '/uploads/' + upData.id;
+    hideUpload();
+    setStatus('Transcribing on server...', true);
+    const result = await transcribeOnServer(upData.id, langSelect.value);
     words = result.words; whisperWords = [...words];
     setStatus('');
     buildTimedLines();
@@ -222,7 +177,7 @@ async function handleFile(file) {
     tryAutoOfficial();
   } catch (e) {
     console.error(e);
-    setStatus('Transcription failed — ' + e.message);
+    setStatus('Error: ' + e.message);
   }
 }
 
